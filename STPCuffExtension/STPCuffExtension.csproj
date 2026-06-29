@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <!-- LSPDFR targets .NET Framework 4.7.2 -->
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>STPCuffExtension</AssemblyName>
+    <RootNamespace>STPCuffExtension</RootNamespace>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Copy output to a staging folder so you can easily drop it into GTA V -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+  <!--
+    ┌───────────────────────────────────────────────────────────────────────┐
+    │  IMPORTANT: Update the HintPath values below to point to the actual   │
+    │  DLL locations in your GTA V installation directory before building.  │
+    └───────────────────────────────────────────────────────────────────────┘
+  -->
+  <ItemGroup>
+    <!-- From your GTA V root folder -->
+    <Reference Include="RagePluginHook">
+      <HintPath>..\..\RagePluginHook.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- From GTA V\plugins\LSPDFR\ -->
+    <Reference Include="LSPD First Response">
+      <HintPath>..\..\plugins\LSPDFR\LSPD First Response.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+
+    <!-- From GTA V\plugins\ or whichever folder you have RAGENativeUI in -->
+    <Reference Include="RAGENativeUI">
+      <HintPath>..\..\RAGENativeUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
