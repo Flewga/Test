@@ -300,6 +300,7 @@
       var isSecurity = !isCash && SECURITY_TYPES[activityType] === 1;
       var symbol, quantity = '', unitPrice = '', fee = parseAmount(get('fee'));
       if (isNaN(fee)) fee = 0;
+      var amountOverride = null; // set to force a specific output amount (or '' to blank it)
 
       // Append the optional exchange suffix (e.g. ".TO") only to plain,
       // non-USD tickers — a US-dollar holding like AAPL must not become AAPL.TO.
@@ -315,19 +316,49 @@
         }
 
         if (activityType === 'BUY' || activityType === 'SELL') {
+          // Wealthfolio's amount convention:
+          //   BUY  amount = quantity * unitPrice + fee   (cash out)
+          //   SELL amount = quantity * unitPrice - fee   (cash in)
+          // Wealthsimple's net cash already equals that, so amount = |net|.
+          // The gross (quantity * unitPrice) is |net| minus the signed fee.
+          var aSign = activityType === 'BUY' ? 1 : -1;
           var trade = extractTrade(description);
           if (!isNaN(trade.quantity)) quantity = trade.quantity;
           if (!isNaN(trade.price)) unitPrice = trade.price;
-          // Derive price from amount if we have qty but no price.
+
+          // Derive a missing price from the net amount: gross = |net| - aSign*fee.
           if (unitPrice === '' && quantity !== '' && !isNaN(amount) && quantity) {
-            unitPrice = round(Math.abs((Math.abs(amount) - fee) / quantity), 6);
+            var gross = Math.abs(amount) - aSign * fee;
+            unitPrice = round(Math.abs(gross / quantity), 6);
           }
+          // Derive a missing net amount from the parsed quantity/price/fee.
+          if (isNaN(amount) && quantity !== '' && unitPrice !== '') {
+            amountOverride = round(quantity * unitPrice + aSign * fee, 2);
+          }
+
           if (quantity === '') {
-            result.warnings.push('Row ' + (r + 1) + ': ' + activityType + ' with no share count found — quantity left blank.');
+            result.warnings.push('Row ' + (r + 1) + ': ' + activityType + ' with no share count found — set quantity manually.');
+          } else if (unitPrice === '') {
+            result.warnings.push('Row ' + (r + 1) + ': ' + activityType + ' with no unit price found — set it manually.');
+          }
+
+          // Sanity check: does quantity x unitPrice (+/- fee) reconcile with the
+          // statement's net cash? A mismatch means something was misparsed.
+          if (quantity !== '' && unitPrice !== '' && !isNaN(amount)) {
+            var expected = round(quantity * unitPrice + aSign * fee, 2);
+            var stmt = round(Math.abs(amount), 2);
+            if (Math.abs(expected - stmt) > Math.max(0.02, stmt * 0.005)) {
+              result.warnings.push('Row ' + (r + 1) + ': ' + quantity + ' x ' + unitPrice +
+                (fee ? (aSign > 0 ? ' + ' : ' - ') + round(fee, 2) + ' fee' : '') +
+                ' = ' + expected + ', but the statement amount is ' + stmt + '. Check quantity/price/fee.');
+            }
           }
         } else if (activityType === 'SPLIT') {
-          var t2 = extractTrade(description);
-          if (!isNaN(t2.quantity)) quantity = t2.quantity;
+          // Wealthfolio treats a SPLIT's amount as the ratio (e.g. 2 for 2:1),
+          // not a dollar value, and needs no quantity/unitPrice. We can't infer
+          // the ratio from a Wealthsimple line, so leave it blank to fill in.
+          amountOverride = '';
+          result.warnings.push('Row ' + (r + 1) + ': stock split for ' + (symbol || 'this holding') + ' — set the split ratio (e.g. 2 for 2:1) as the amount in Wealthfolio.');
         }
       } else {
         // Cash-side activity: dividends stay attached to their security symbol,
@@ -347,7 +378,9 @@
         }
       }
 
-      var outAmount = isNaN(amount) ? '' : round(Math.abs(amount), 2);
+      var outAmount = amountOverride !== null
+        ? amountOverride
+        : (isNaN(amount) ? '' : round(Math.abs(amount), 2));
 
       var record = {
         date: date,

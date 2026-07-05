@@ -225,6 +225,92 @@ function rowsByType(res, type) { return res.records.filter(r => r.activityType =
 })();
 
 // ---------------------------------------------------------------------------
+// Trade math with an explicit commission (Wealthfolio: BUY amount = q*p + fee,
+// SELL amount = q*p - fee, and amount == |Wealthsimple net|).
+// ---------------------------------------------------------------------------
+(() => {
+  const csv = [
+    'date,transaction,description,amount,fee,currency',
+    // net = -(10*14.52 + 5) = -150.20
+    '2024-10-15,BUY,"ZFL - BMO: Bought 10.0000 shares at $14.52",-150.20,5.00,CAD',
+    // net = 3*225.50 - 5 = 671.50
+    '2024-10-10,SELL,"AAPL - Apple Inc: Sold 3.0000 shares at US$225.50",671.50,5.00,USD',
+  ].join('\n');
+  const res = WSWF.convert(csv, { accountType: 'investing' });
+
+  const buy = res.records[0];
+  eq(buy.quantity, '10', 'fee-buy: quantity');
+  eq(buy.unitPrice, '14.52', 'fee-buy: unit price');
+  eq(buy.fee, '5', 'fee-buy: fee');
+  eq(buy.amount, '150.2', 'fee-buy: amount = q*p + fee = |net|');
+  // Internal consistency with Wealthfolio's formula.
+  ok(Math.abs((+buy.quantity * +buy.unitPrice + +buy.fee) - +buy.amount) < 0.001, 'fee-buy: q*p+fee == amount');
+
+  const sell = res.records[1];
+  eq(sell.amount, '671.5', 'fee-sell: amount = q*p - fee = |net|');
+  ok(Math.abs((+sell.quantity * +sell.unitPrice - +sell.fee) - +sell.amount) < 0.001, 'fee-sell: q*p-fee == amount');
+
+  ok(res.warnings.length === 0, 'fee-trades: no warnings when consistent (' + JSON.stringify(res.warnings) + ')');
+})();
+
+// SELL price derivation with a fee but no price in the description.
+// net = 4*100 - 5 = 395  =>  price must derive to 100 (not 97.5).
+(() => {
+  const csv = [
+    'date,transaction,description,amount,fee,currency',
+    '2024-09-09,SELL,"VFV - Vanguard: Sold 4 shares",395.00,5.00,CAD',
+  ].join('\n');
+  const sell = WSWF.convert(csv, { accountType: 'investing' }).records[0];
+  eq(sell.unitPrice, '100', 'sell-derive: price = (|net| + fee) / qty');
+  eq(sell.amount, '395', 'sell-derive: amount = q*p - fee = |net|');
+})();
+
+// Missing net amount: derive the total from parsed quantity/price/fee.
+(() => {
+  const csv = [
+    'date,transaction,description,amount,fee,currency',
+    '2024-09-09,BUY,"VFV - Vanguard: Bought 4 shares at $100.00",,9.99,CAD',
+  ].join('\n');
+  const buy = WSWF.convert(csv, { accountType: 'investing' }).records[0];
+  eq(buy.amount, '409.99', 'no-net: amount = q*p + fee');
+})();
+
+// Mismatch between parsed price and the statement amount raises a warning.
+(() => {
+  const csv = [
+    'date,transaction,description,amount,currency',
+    // 10 * 14.52 = 145.20, but the statement says 200 — misparse/typo.
+    '2024-10-15,BUY,"ZFL - BMO: Bought 10.0000 shares at $14.52",-200.00,CAD',
+  ].join('\n');
+  const res = WSWF.convert(csv, { accountType: 'investing' });
+  ok(res.warnings.some(w => /statement amount is 200/.test(w)), 'mismatch: warns on q*p vs statement (' + JSON.stringify(res.warnings) + ')');
+})();
+
+// Fractional shares reconcile cleanly.
+(() => {
+  const csv = [
+    'date,transaction,description,amount,currency',
+    '2024-10-15,BUY,"XEQT - iShares: Bought 2.5000 shares at $32.10",-80.25,CAD',
+  ].join('\n');
+  const res = WSWF.convert(csv, { accountType: 'investing' });
+  eq(res.records[0].quantity, '2.5', 'fractional: quantity');
+  eq(res.records[0].amount, '80.25', 'fractional: amount');
+  ok(res.warnings.length === 0, 'fractional: no warnings');
+})();
+
+// SPLIT leaves amount blank (ratio is set in Wealthfolio) and warns.
+(() => {
+  const csv = [
+    'date,transaction,description,amount,currency',
+    '2024-06-10,SPLIT,"AAPL - Apple Inc: Stock split 4:1",0,USD',
+  ].join('\n');
+  const res = WSWF.convert(csv, { accountType: 'investing' });
+  eq(res.records[0].activityType, 'SPLIT', 'split: type');
+  eq(res.records[0].amount, '', 'split: amount blank (not a dollar value)');
+  ok(res.warnings.some(w => /split ratio/.test(w)), 'split: warns to set ratio');
+})();
+
+// ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) {
   console.log('\nFailures:\n' + failures.map(f => '  ✗ ' + f).join('\n'));

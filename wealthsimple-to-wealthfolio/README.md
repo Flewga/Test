@@ -42,6 +42,12 @@ date, symbol, quantity, activityType, unitPrice, currency, fee, amount
 - **Investing** accounts are classified by the transaction type/description, and
   buys/sells/dividends/splits keep their ticker. Deposits, interest and fees go
   to `$CASH-<currency>`.
+- **Trade amounts** follow Wealthfolio's convention: a `BUY`'s `amount` is
+  `quantity × unitPrice + fee` and a `SELL`'s is `quantity × unitPrice − fee`
+  (which is exactly Wealthsimple's net cash). Quantity and unit price are read
+  from the description; if the price is missing it's derived from the net amount
+  and the fee. If the parsed `quantity × unitPrice` doesn't reconcile with the
+  statement's amount, that row is flagged as a warning so you can check it.
 - **Spending** and **Credit card** accounts are all cash: direction comes from
   the sign of the amount (out → `WITHDRAWAL`, in → `DEPOSIT`), with interest and
   fees pulled out by keyword.
