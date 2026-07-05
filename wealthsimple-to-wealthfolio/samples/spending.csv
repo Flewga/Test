@@ -1,0 +1,7 @@
+date,transaction,description,amount,balance,currency
+2024-11-02,DEPOSIT,"Direct deposit - ACME CORP PAYROLL",1500.00,1595.25,CAD
+2024-11-01,SPEND,"Tim Hortons #4021 TORONTO ON",-4.75,95.25,CAD
+2024-11-03,SPEND,"PRESTO/TTC FARE",-3.30,91.95,CAD
+2024-11-03,INTEREST,"Interest earned on your balance",1.23,93.18,CAD
+2024-11-04,REFUND,"Refund from AMAZON.CA",20.00,113.18,CAD
+2024-11-05,WITHDRAWAL,"e-Transfer sent to J. Smith",-50.00,63.18,CAD

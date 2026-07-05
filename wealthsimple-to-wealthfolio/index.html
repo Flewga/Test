@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wealthsimple → Wealthfolio CSV Translator</title>
+<meta name="description" content="Convert Wealthsimple transaction CSVs into Wealthfolio-ready import files, entirely in your browser.">
+<style>
+:root {
+  --ground: #fbfaf8;
+  --surface: #ffffff;
+  --surface-2: #f4f2ec;
+  --ink: #191c1a;
+  --muted: #6a716b;
+  --faint: #949a92;
+  --hairline: #e6e4de;
+  --accent: #1e6b57;
+  --accent-ink: #17513f;
+  --accent-wash: #e9f1ed;
+  --warn: #a06f14;
+  --warn-wash: #f6eddb;
+  --crit: #b0453a;
+  --crit-wash: #f7e6e2;
+  --good: #2e8b74;
+  --shadow: 0 1px 2px rgba(25, 28, 26, .05), 0 6px 22px rgba(25, 28, 26, .06);
+  --radius: 12px;
+  --mono: ui-monospace, "SF Mono", "SFMono-Regular", "Menlo", "Cascadia Mono", "Roboto Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #0f1311;
+    --surface: #171b18;
+    --surface-2: #1e2320;
+    --ink: #e9eee9;
+    --muted: #929a92;
+    --faint: #6d756e;
+    --hairline: #262c27;
+    --accent: #59b89c;
+    --accent-ink: #7fccb4;
+    --accent-wash: #16241f;
+    --warn: #d6a441;
+    --warn-wash: #2a2415;
+    --crit: #e08072;
+    --crit-wash: #2c1c19;
+    --good: #59b89c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 26px rgba(0, 0, 0, .34);
+  }
+}
+:root[data-theme="light"] {
+  --ground: #fbfaf8; --surface: #ffffff; --surface-2: #f4f2ec; --ink: #191c1a;
+  --muted: #6a716b; --faint: #949a92; --hairline: #e6e4de; --accent: #1e6b57;
+  --accent-ink: #17513f; --accent-wash: #e9f1ed; --warn: #a06f14; --warn-wash: #f6eddb;
+  --crit: #b0453a; --crit-wash: #f7e6e2; --good: #2e8b74;
+  --shadow: 0 1px 2px rgba(25,28,26,.05), 0 6px 22px rgba(25,28,26,.06);
+}
+:root[data-theme="dark"] {
+  --ground: #0f1311; --surface: #171b18; --surface-2: #1e2320; --ink: #e9eee9;
+  --muted: #929a92; --faint: #6d756e; --hairline: #262c27; --accent: #59b89c;
+  --accent-ink: #7fccb4; --accent-wash: #16241f; --warn: #d6a441; --warn-wash: #2a2415;
+  --crit: #e08072; --crit-wash: #2c1c19; --good: #59b89c;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.34);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 960px; margin: 0 auto; padding: clamp(20px, 4vw, 44px) clamp(16px, 4vw, 28px) 72px; }
+
+/* ---- Header ---- */
+header.masthead { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+.eyebrow {
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); font-weight: 650;
+  display: inline-flex; align-items: center; gap: 9px;
+}
+.eyebrow .flow { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+.eyebrow .arrow { color: var(--accent); }
+h1 {
+  font-size: clamp(1.9rem, 4.4vw, 2.7rem); line-height: 1.05; margin: 0;
+  font-weight: 680; letter-spacing: -0.02em; text-wrap: balance;
+}
+.lede { margin: 2px 0 0; color: var(--muted); max-width: 62ch; font-size: 1.02rem; }
+
+/* ---- Cards ---- */
+.card {
+  background: var(--surface); border: 1px solid var(--hairline);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.stack { display: flex; flex-direction: column; gap: 20px; }
+.card-pad { padding: clamp(18px, 3vw, 26px); }
+.card-title {
+  font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--faint); font-weight: 650; margin: 0 0 14px;
+}
+
+/* ---- Setup row ---- */
+.setup-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 22px; align-items: end; }
+@media (max-width: 680px) { .setup-grid { grid-template-columns: 1fr; gap: 18px; } }
+.field label { display: block; font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+.field .hint { display: block; font-weight: 400; color: var(--faint); font-size: 12px; margin-top: 5px; }
+
+.segmented { display: inline-flex; background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 10px; padding: 3px; gap: 2px; }
+.segmented button {
+  appearance: none; border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 14px; font-weight: 550; padding: 8px 14px; border-radius: 7px;
+  cursor: pointer; transition: background .12s, color .12s; white-space: nowrap;
+}
+.segmented button:hover { color: var(--ink); }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--accent-ink); box-shadow: var(--shadow); }
+
+input[type="text"] {
+  width: 100%; font: inherit; font-size: 14px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: 9px;
+  padding: 9px 11px; transition: border-color .12s, box-shadow .12s;
+}
+input[type="text"]::placeholder { color: var(--faint); }
+input[type="text"]:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+
+/* ---- Drop zone ---- */
+.drop {
+  border: 1.5px dashed var(--hairline); border-radius: var(--radius);
+  background: var(--surface); padding: 40px 24px; text-align: center;
+  cursor: pointer; transition: border-color .14s, background .14s, transform .06s;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.drop:hover { border-color: var(--accent); background: var(--accent-wash); }
+.drop.drag { border-color: var(--accent); background: var(--accent-wash); border-style: solid; }
+.drop:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash); }
+.drop .glyph { width: 34px; height: 34px; color: var(--accent); }
+.drop .big { font-size: 1.05rem; font-weight: 600; }
+.drop .small { color: var(--muted); font-size: .9rem; }
+.drop .browse { color: var(--accent-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---- Results ---- */
+#results[hidden] { display: none; }
+.results-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.filename { font-family: var(--mono); font-size: .9rem; color: var(--muted); overflow-wrap: anywhere; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.chip {
+  display: inline-flex; align-items: baseline; gap: 7px;
+  background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 999px;
+  padding: 5px 12px; font-size: 13px; color: var(--muted);
+}
+.chip b { color: var(--ink); font-weight: 650; font-variant-numeric: tabular-nums; }
+.chip.accent { background: var(--accent-wash); border-color: transparent; color: var(--accent-ink); }
+.chip.accent b { color: var(--accent-ink); }
+
+.detected { font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+.detected code { font-family: var(--mono); background: var(--surface-2); border-radius: 5px; padding: 1px 6px; color: var(--ink); font-size: 12px; }
+.detected .miss { color: var(--crit); }
+
+.notices { display: flex; flex-direction: column; gap: 8px; margin: 16px 0 0; }
+.notice {
+  display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.45;
+  border-radius: 9px; padding: 10px 13px; border: 1px solid transparent;
+}
+.notice.warn { background: var(--warn-wash); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 22%, transparent); }
+.notice.good { background: var(--accent-wash); color: var(--accent-ink); }
+.notice .ico { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 2px; }
+.notice.collapsed .extra { display: none; }
+.notice-more { background: none; border: 0; color: inherit; font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; padding: 0; opacity: .85; }
+
+/* ---- Preview table ---- */
+.table-wrap { margin-top: 18px; border: 1px solid var(--hairline); border-radius: 10px; overflow: auto; max-height: 420px; }
+table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12.5px; }
+thead th {
+  position: sticky; top: 0; z-index: 1; background: var(--surface-2);
+  text-align: left; font-weight: 650; color: var(--muted); white-space: nowrap;
+  padding: 9px 12px; border-bottom: 1px solid var(--hairline); letter-spacing: .01em;
+}
+tbody td { padding: 7px 12px; border-bottom: 1px solid var(--hairline); white-space: nowrap; color: var(--ink); }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.sym { color: var(--accent-ink); font-weight: 600; }
+.tag {
+  display: inline-block; font-family: var(--sans); font-size: 11px; font-weight: 600;
+  padding: 1px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--hairline); color: var(--muted);
+}
+.more-rows { padding: 10px 12px; font-family: var(--sans); font-size: 12.5px; color: var(--faint); text-align: center; }
+
+/* ---- Actions ---- */
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 20px; }
+button.primary, button.ghost {
+  appearance: none; font: inherit; font-weight: 600; font-size: 14.5px;
+  border-radius: 9px; padding: 11px 20px; cursor: pointer; border: 1px solid transparent;
+  transition: filter .12s, background .12s, border-color .12s; display: inline-flex; align-items: center; gap: 9px;
+}
+button.primary { background: var(--accent); color: #fff; }
+:root[data-theme="dark"] button.primary { color: #0f1311; }
+@media (prefers-color-scheme: dark) { button.primary { color: #0f1311; } }
+:root[data-theme="light"] button.primary { color: #fff; }
+button.primary:hover { filter: brightness(1.06); }
+button.ghost { background: transparent; color: var(--ink); border-color: var(--hairline); }
+button.ghost:hover { background: var(--surface-2); }
+button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-wash); }
+.actions .done { color: var(--good); font-size: 13.5px; font-weight: 600; }
+.actions .done[hidden] { display: none; }
+
+/* ---- How it works / footer ---- */
+.how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (max-width: 680px) { .how { grid-template-columns: 1fr; gap: 14px; } }
+.how .step .n { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 650; }
+.how .step h3 { font-size: .98rem; margin: 6px 0 4px; font-weight: 640; }
+.how .step p { margin: 0; font-size: .9rem; color: var(--muted); }
+
+footer.foot { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--hairline); color: var(--faint); font-size: 13px; display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+footer.foot .lock { display: inline-flex; align-items: center; gap: 7px; }
+footer.foot a { color: var(--muted); }
+
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <span class="eyebrow">
+      CSV Translator
+      <span class="flow">Wealthsimple <span class="arrow" aria-hidden="true">→</span> Wealthfolio</span>
+    </span>
+    <h1>Import your Wealthsimple exports without the copy-paste</h1>
+    <p class="lede">Drop a Wealthsimple transaction CSV and get back a file Wealthfolio can import directly — tickers pulled out of the description, activity types mapped, cash rows tagged with <code>$CASH</code>. Works for spending, credit&nbsp;card, and investing accounts.</p>
+  </header>
+
+  <div class="stack">
+    <!-- Setup -->
+    <section class="card card-pad" aria-labelledby="setup-title">
+      <h2 class="card-title" id="setup-title">1 · Set up the account</h2>
+      <div class="setup-grid">
+        <div class="field">
+          <label id="acct-label">Account type</label>
+          <div class="segmented" role="group" aria-labelledby="acct-label" id="acct-seg">
+            <button type="button" data-acct="investing" aria-pressed="true">Investing</button>
+            <button type="button" data-acct="spending" aria-pressed="false">Spending</button>
+            <button type="button" data-acct="credit" aria-pressed="false">Credit card</button>
+          </div>
+          <span class="hint" id="acct-hint">Trades &amp; dividends keep their ticker; cash moves use <code>$CASH</code>.</span>
+        </div>
+        <div class="field">
+          <label for="ccy">Default currency</label>
+          <input type="text" id="ccy" value="CAD" maxlength="3" autocomplete="off" spellcheck="false" aria-describedby="ccy-hint">
+          <span class="hint" id="ccy-hint">Used when a row has no currency column.</span>
+        </div>
+        <div class="field" id="suffix-field">
+          <label for="suffix">Ticker suffix <span style="font-weight:400;color:var(--faint)">(optional)</span></label>
+          <input type="text" id="suffix" placeholder="e.g. .TO" autocomplete="off" spellcheck="false" aria-describedby="suffix-hint">
+          <span class="hint" id="suffix-hint">Wealthfolio often needs an exchange suffix for Canadian tickers.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Drop zone -->
+    <section aria-labelledby="drop-title">
+      <h2 class="card-title" id="drop-title">2 · Add the Wealthsimple CSV</h2>
+      <div class="drop" id="drop" role="button" tabindex="0" aria-label="Drop a CSV file here or press Enter to browse">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4l4 4"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        <span class="big">Drop your CSV here</span>
+        <span class="small">or <span class="browse">browse your files</span> — nothing is uploaded</span>
+      </div>
+      <input type="file" id="file" accept=".csv,text/csv" class="sr-only" tabindex="-1">
+    </section>
+
+    <!-- Results -->
+    <section class="card card-pad" id="results" hidden aria-labelledby="results-title" aria-live="polite">
+      <div class="results-head">
+        <h2 class="card-title" id="results-title" style="margin:0">3 · Review &amp; download</h2>
+        <span class="filename" id="filename"></span>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="detected" id="detected"></p>
+      <div class="notices" id="notices"></div>
+      <div class="table-wrap" id="table-wrap"></div>
+      <div class="actions">
+        <button type="button" class="primary" id="download">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v10m0 0l-4-4m4 4l4-4"/><path d="M5 19h14"/></svg>
+          Download Wealthfolio CSV
+        </button>
+        <button type="button" class="ghost" id="reset">Clear</button>
+        <span class="done" id="done" hidden>Saved — import it in Wealthfolio under Activities → Import.</span>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="card card-pad" aria-labelledby="how-title">
+      <h2 class="card-title" id="how-title">What it does</h2>
+      <div class="how">
+        <div class="step">
+          <span class="n">Ticker</span>
+          <h3>Pulls the symbol out</h3>
+          <p>“ZFL - BMO Long Federal Bond Index ETF: Cash dividend…” becomes a clean <code>ZFL</code> in its own column.</p>
+        </div>
+        <div class="step">
+          <span class="n">Type</span>
+          <h3>Maps the activity</h3>
+          <p>Buys, sells, dividends, interest, fees, deposits and withdrawals map to Wealthfolio’s activity types.</p>
+        </div>
+        <div class="step">
+          <span class="n">Cash</span>
+          <h3>Tags cash moves</h3>
+          <p>Spending and credit-card rows ride the <code>$CASH-&lt;currency&gt;</code> symbol so every row imports.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <span class="lock">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+      100% in your browser · no upload · no tracking
+    </span>
+    <span>Output columns: <code style="font-family:var(--mono)">date, symbol, quantity, activityType, unitPrice, currency, fee, amount</code></span>
+  </footer>
+</div>
+
+<script>
+/*
+ * convert.js — Wealthsimple → Wealthfolio CSV conversion (pure, no DOM).
+ *
+ * Wealthsimple exports transaction CSVs whose columns are typically:
+ *     date, transaction, description, amount, balance, currency
+ * and where the ticker for a trade or dividend lives *inside* the
+ * description, e.g.
+ *     "ZFL - BMO Long Federal Bond Index ETF: Cash dividend distribution,
+ *      received on 2024-11-04, record date of 2024-10-30"
+ *
+ * Wealthfolio's activity importer instead wants one column per field and a
+ * bare symbol on every row (cash-only rows use the $CASH-<CCY> pseudo-symbol):
+ *     date, symbol, quantity, activityType, unitPrice, currency, fee, amount
+ *
+ * This module reads the former and produces the latter. Column detection is
+ * done by header name (case-insensitive with aliases) so it survives small
+ * differences between Wealthsimple's spending, credit, and investing exports.
+ *
+ * The same file is loaded by the browser tool (attaches to window.WSWF) and by
+ * the Node test suite (module.exports).
+ */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.WSWF = api;
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // The columns Wealthfolio's activity importer maps against.
+  var OUTPUT_COLUMNS = [
+    'date', 'symbol', 'quantity', 'activityType', 'unitPrice', 'currency', 'fee', 'amount',
+  ];
+
+  // ---------------------------------------------------------------------------
+  // CSV parsing / serialization (RFC-4180-ish: quotes, escaped quotes, newlines)
+  // ---------------------------------------------------------------------------
+
+  function parseCSV(text) {
+    var rows = [];
+    var row = [];
+    var field = '';
+    var inQuotes = false;
+    // Strip a UTF-8 BOM if present.
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field); field = '';
+      } else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); field = '';
+        rows.push(row); row = [];
+      } else {
+        field += c;
+      }
+    }
+    // Flush trailing field/row unless the file ended on a clean newline.
+    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    // Drop fully-empty trailing rows.
+    while (rows.length && rows[rows.length - 1].every(function (f) { return f === ''; })) rows.pop();
+    return rows;
+  }
+
+  function csvCell(value) {
+    var s = value == null ? '' : String(value);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function toCSV(header, records) {
+    var lines = [header.map(csvCell).join(',')];
+    records.forEach(function (rec) {
+      lines.push(header.map(function (h) { return csvCell(rec[h]); }).join(','));
+    });
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Column detection
+  // ---------------------------------------------------------------------------
+
+  var COLUMN_ALIASES = {
+    date: ['date', 'transaction date', 'trade date', 'process date', 'settlement date', 'posted date', 'time'],
+    type: ['transaction', 'transaction type', 'type', 'activity', 'activity type', 'action', 'category'],
+    description: ['description', 'details', 'detail', 'memo', 'payee', 'notes', 'note', 'name', 'merchant'],
+    amount: ['amount', 'net amount', 'value', 'cash', 'debit/credit'],
+    currency: ['currency', 'ccy', 'cur'],
+    symbol: ['symbol', 'ticker', 'security'],
+    quantity: ['quantity', 'qty', 'shares', 'units', 'number of shares'],
+    price: ['price', 'unit price', 'share price', 'price per share'],
+    fee: ['fee', 'fees', 'commission', 'commissions'],
+    balance: ['balance', 'running balance', 'account balance'],
+  };
+
+  function normHeader(h) {
+    return String(h == null ? '' : h).trim().toLowerCase().replace(/[_\s]+/g, ' ');
+  }
+
+  // Returns { field: columnIndex } for every field we could match.
+  function detectColumns(header) {
+    var normalized = header.map(normHeader);
+    var map = {};
+    Object.keys(COLUMN_ALIASES).forEach(function (field) {
+      var aliases = COLUMN_ALIASES[field];
+      // Prefer an exact alias match, then fall back to a substring match.
+      var idx = -1;
+      for (var a = 0; a < aliases.length && idx === -1; a++) {
+        idx = normalized.indexOf(aliases[a]);
+      }
+      if (idx === -1) {
+        for (var j = 0; j < normalized.length && idx === -1; j++) {
+          for (var k = 0; k < aliases.length; k++) {
+            if (normalized[j].indexOf(aliases[k]) !== -1) { idx = j; break; }
+          }
+        }
+      }
+      if (idx !== -1) map[field] = idx;
+    });
+    return map;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Field extraction helpers
+  // ---------------------------------------------------------------------------
+
+  function parseAmount(raw) {
+    if (raw == null) return NaN;
+    var s = String(raw).trim();
+    if (!s) return NaN;
+    var negative = /^\(.*\)$/.test(s) || /-\s*$/.test(s); // (1.23) or trailing minus
+    // Normalize unicode minus, strip currency symbols/codes, commas, parens, spaces.
+    s = s.replace(/−/g, '-')
+         .replace(/[()]/g, '')
+         .replace(/[^0-9.\-]/g, '');
+    var n = parseFloat(s);
+    if (isNaN(n)) return NaN;
+    if (negative && n > 0) n = -n;
+    return n;
+  }
+
+  function normalizeDate(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    // Already ISO (optionally with a time component)?
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
+    // MM/DD/YYYY or DD/MM/YYYY — ambiguous, so only handle the unambiguous
+    // YYYY/MM/DD form deterministically; otherwise defer to Date.parse.
+    var ymd = s.match(/^(\d{4})[\/.](\d{1,2})[\/.](\d{1,2})$/);
+    if (ymd) return ymd[1] + '-' + pad2(ymd[2]) + '-' + pad2(ymd[3]);
+    var t = Date.parse(s);
+    if (!isNaN(t)) {
+      var d = new Date(t);
+      return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate());
+    }
+    return s; // leave untouched; surfaced as a warning upstream
+  }
+
+  function pad2(n) { n = String(n); return n.length < 2 ? '0' + n : n; }
+
+  // Pull the leading ticker out of a Wealthsimple description.
+  //   "ZFL - BMO Long Federal Bond Index ETF: ..." -> "ZFL"
+  //   "AAPL: Cash dividend ..."                     -> "AAPL"
+  //   "BRK.B - Berkshire ..."                       -> "BRK.B"
+  // Returns '' when the text doesn't start with a ticker-like token.
+  function extractSymbol(description) {
+    var s = String(description == null ? '' : description).trim();
+    var m = s.match(/^([A-Za-z][A-Za-z0-9.]{0,9})\s*(?:-|:)\s/);
+    if (!m) m = s.match(/^([A-Za-z][A-Za-z0-9.]{0,9})\s*:/);
+    if (!m) return '';
+    var sym = m[1].toUpperCase().replace(/\.$/, '');
+    // Guard against grabbing an ordinary capitalized word that happens to be
+    // followed by a colon (e.g. "Interest: ..."). Real tickers are short and
+    // usually all-caps or contain a dot.
+    if (sym.length > 6 && sym.indexOf('.') === -1) return '';
+    return sym;
+  }
+
+  // Pull quantity and price out of a trade description.
+  //   "Bought 10.0000 shares at $12.34" -> { quantity: 10, price: 12.34 }
+  //   "Sold 5 shares of AAPL at US$150.00"
+  function extractTrade(description) {
+    var s = String(description == null ? '' : description);
+    var m = s.match(/([\d,]*\.?\d+)\s*(?:shares?|units?)\b(?:[^@]*?\bat\b|[^@]*?@)\s*(?:US|C|CA|CAD|USD)?\$?\s*([\d,]*\.?\d+)/i);
+    if (m) {
+      return { quantity: parseAmount(m[1]), price: parseAmount(m[2]) };
+    }
+    // Fall back: just a share count, price unknown.
+    var q = s.match(/([\d,]*\.?\d+)\s*(?:shares?|units?)\b/i);
+    if (q) return { quantity: parseAmount(q[1]), price: NaN };
+    return { quantity: NaN, price: NaN };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Activity-type classification
+  // ---------------------------------------------------------------------------
+
+  // For investing accounts: look at the type code AND the description, since
+  // the useful signal lives in one or the other depending on the export.
+  function classifyInvesting(haystack) {
+    var h = ' ' + haystack.toLowerCase() + ' ';
+    if (/split/.test(h)) return 'SPLIT';
+    if (/divid|distribution/.test(h)) return 'DIVIDEND';
+    if (/non.?resident|withhold|\bnr[tw]\b|\btax\b/.test(h)) return 'TAX';
+    if (/interest/.test(h)) return 'INTEREST';
+    if (/\bfee\b|commission|management fee|\bmgmt\b|adr fee/.test(h)) return 'FEE';
+    if (/\bbought\b|\bbuy\b|purchase of|market buy|limit buy/.test(h)) return 'BUY';
+    if (/\bsold\b|\bsell\b|market sell|limit sell/.test(h)) return 'SELL';
+    if (/withdraw|transfer out|\baft out\b|\beft out\b|cash out/.test(h)) return 'WITHDRAWAL';
+    if (/contribution|deposit|transfer in|\baft in\b|\beft in\b|funding|received/.test(h)) return 'DEPOSIT';
+    return null; // unknown — caller falls back to sign
+  }
+
+  // For spending / credit accounts everything is cash: direction comes from the
+  // sign of the amount, with interest and fees pulled out by keyword.
+  function classifyCash(haystack, amount) {
+    var h = ' ' + haystack.toLowerCase() + ' ';
+    if (/interest/.test(h)) return 'INTEREST';
+    if (/\bfee\b|\bnsf\b|service charge|monthly plan/.test(h)) return 'FEE';
+    if (!isNaN(amount) && amount !== 0) return amount > 0 ? 'DEPOSIT' : 'WITHDRAWAL';
+    if (/refund|reimburs|cash ?back|rebate|reward|received|credit|payment received/.test(h)) return 'DEPOSIT';
+    if (/purchase|withdraw|paid|payment|bill|sent|debit/.test(h)) return 'WITHDRAWAL';
+    return null;
+  }
+
+  var SECURITY_TYPES = { BUY: 1, SELL: 1, DIVIDEND: 1, SPLIT: 1 };
+
+  // ---------------------------------------------------------------------------
+  // Main conversion
+  // ---------------------------------------------------------------------------
+
+  // options:
+  //   accountType   'investing' | 'spending' | 'credit'   (default 'investing')
+  //   defaultCurrency  fallback currency code             (default 'CAD')
+  //   symbolSuffix  appended to symbols lacking a '.'      (default '', e.g. '.TO')
+  function convert(text, options) {
+    options = options || {};
+    var accountType = options.accountType || 'investing';
+    var isCash = accountType === 'spending' || accountType === 'credit';
+    var defaultCurrency = (options.defaultCurrency || 'CAD').toUpperCase();
+    var symbolSuffix = options.symbolSuffix || '';
+
+    var grid = parseCSV(text);
+    var result = {
+      header: OUTPUT_COLUMNS.slice(),
+      records: [],
+      warnings: [],
+      detected: {},
+      stats: { input: 0, output: 0, byType: {} },
+    };
+
+    if (!grid.length) {
+      result.warnings.push('The file appears to be empty.');
+      return result;
+    }
+
+    var header = grid[0];
+    var cols = detectColumns(header);
+    result.detected = describeDetection(header, cols);
+
+    if (cols.date == null) result.warnings.push('No date column was detected — check the mapping.');
+    if (cols.amount == null && cols.price == null) result.warnings.push('No amount column was detected — amounts may be blank.');
+    if (cols.description == null && cols.type == null) result.warnings.push('No description or transaction-type column was detected — activity types will be guessed from amount sign only.');
+
+    var unknownTypes = {};
+
+    for (var r = 1; r < grid.length; r++) {
+      var row = grid[r];
+      if (row.every(function (f) { return String(f).trim() === ''; })) continue;
+      result.stats.input++;
+
+      var get = function (field) { return cols[field] != null ? row[cols[field]] : ''; };
+
+      var date = normalizeDate(get('date'));
+      var rawType = String(get('type') || '').trim();
+      var description = String(get('description') || '').trim();
+      var currency = String(get('currency') || '').trim().toUpperCase() || defaultCurrency;
+      var amount = parseAmount(get('amount'));
+      var haystack = rawType + ' ' + description;
+
+      var activityType = isCash
+        ? classifyCash(haystack, amount)
+        : classifyInvesting(haystack);
+
+      if (!activityType) {
+        // Last-resort fallback: use amount sign.
+        if (!isNaN(amount) && amount !== 0) activityType = amount > 0 ? 'DEPOSIT' : 'WITHDRAWAL';
+        else activityType = 'DEPOSIT';
+        var key = rawType || '(blank)';
+        unknownTypes[key] = (unknownTypes[key] || 0) + 1;
+      }
+
+      var isSecurity = !isCash && SECURITY_TYPES[activityType] === 1;
+      var symbol, quantity = '', unitPrice = '', fee = parseAmount(get('fee'));
+      if (isNaN(fee)) fee = 0;
+
+      // Append the optional exchange suffix (e.g. ".TO") only to plain,
+      // non-USD tickers — a US-dollar holding like AAPL must not become AAPL.TO.
+      var applySuffix = function (sym) {
+        if (!symbolSuffix || !sym || sym[0] === '$' || sym.indexOf('.') !== -1 || currency === 'USD') return sym;
+        return sym + symbolSuffix;
+      };
+
+      if (isSecurity) {
+        symbol = applySuffix(extractSymbol(description) || String(get('symbol') || '').trim().toUpperCase());
+        if (!symbol) {
+          result.warnings.push('Row ' + (r + 1) + ': could not find a ticker in "' + truncate(description, 60) + '". Set the symbol manually before importing.');
+        }
+
+        if (activityType === 'BUY' || activityType === 'SELL') {
+          var trade = extractTrade(description);
+          if (!isNaN(trade.quantity)) quantity = trade.quantity;
+          if (!isNaN(trade.price)) unitPrice = trade.price;
+          // Derive price from amount if we have qty but no price.
+          if (unitPrice === '' && quantity !== '' && !isNaN(amount) && quantity) {
+            unitPrice = round(Math.abs((Math.abs(amount) - fee) / quantity), 6);
+          }
+          if (quantity === '') {
+            result.warnings.push('Row ' + (r + 1) + ': ' + activityType + ' with no share count found — quantity left blank.');
+          }
+        } else if (activityType === 'SPLIT') {
+          var t2 = extractTrade(description);
+          if (!isNaN(t2.quantity)) quantity = t2.quantity;
+        }
+      } else {
+        // Cash-side activity: dividends stay attached to their security symbol,
+        // everything else rides the $CASH pseudo-symbol.
+        if (activityType === 'DIVIDEND') {
+          symbol = extractSymbol(description);
+          if (!symbol) {
+            symbol = '$CASH-' + currency;
+            result.warnings.push('Row ' + (r + 1) + ': dividend with no ticker — filed against ' + symbol + '.');
+          } else {
+            symbol = applySuffix(symbol);
+          }
+        } else if (activityType === 'TAX') {
+          symbol = applySuffix(extractSymbol(description)) || ('$CASH-' + currency);
+        } else {
+          symbol = '$CASH-' + currency;
+        }
+      }
+
+      var outAmount = isNaN(amount) ? '' : round(Math.abs(amount), 2);
+
+      var record = {
+        date: date,
+        symbol: symbol,
+        quantity: quantity === '' ? (isSecurity ? '' : '0') : String(quantity),
+        activityType: activityType,
+        unitPrice: unitPrice === '' ? '0' : String(unitPrice),
+        currency: currency,
+        fee: String(round(fee, 2)),
+        amount: outAmount === '' ? '' : String(outAmount),
+      };
+      result.records.push(record);
+      result.stats.output++;
+      result.stats.byType[activityType] = (result.stats.byType[activityType] || 0) + 1;
+    }
+
+    Object.keys(unknownTypes).forEach(function (t) {
+      result.warnings.push('Unrecognized transaction type "' + t + '" (' + unknownTypes[t] + ' row' + (unknownTypes[t] > 1 ? 's' : '') + ') — classified by amount sign. Review these.');
+    });
+
+    return result;
+  }
+
+  function describeDetection(header, cols) {
+    var out = {};
+    Object.keys(cols).forEach(function (field) { out[field] = header[cols[field]]; });
+    return out;
+  }
+
+  function round(n, dp) {
+    if (isNaN(n)) return n;
+    var f = Math.pow(10, dp);
+    return Math.round((n + Number.EPSILON) * f) / f;
+  }
+
+  function truncate(s, n) { s = String(s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+  return {
+    OUTPUT_COLUMNS: OUTPUT_COLUMNS,
+    parseCSV: parseCSV,
+    toCSV: toCSV,
+    detectColumns: detectColumns,
+    normalizeDate: normalizeDate,
+    parseAmount: parseAmount,
+    extractSymbol: extractSymbol,
+    extractTrade: extractTrade,
+    convert: convert,
+  };
+});
+
+</script>
+<script>
+/* ui.js — DOM wiring for the converter. Depends on WSWF (convert.js). */
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+
+  var state = {
+    accountType: 'investing',
+    fileName: '',
+    text: '',
+    result: null,
+  };
+
+  // ---- Setup controls -------------------------------------------------------
+  var seg = $('acct-seg');
+  var acctHint = $('acct-hint');
+  var suffixField = $('suffix-field');
+  var HINTS = {
+    investing: 'Trades &amp; dividends keep their ticker; cash moves use <code>$CASH</code>.',
+    spending: 'Every row is treated as cash on <code>$CASH</code>; direction comes from the amount.',
+    credit: 'Purchases become withdrawals, payments &amp; cashback become deposits, all on <code>$CASH</code>.',
+  };
+  seg.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-acct]');
+    if (!btn) return;
+    state.accountType = btn.getAttribute('data-acct');
+    Array.prototype.forEach.call(seg.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+    acctHint.innerHTML = HINTS[state.accountType];
+    suffixField.style.opacity = state.accountType === 'investing' ? '1' : '0.5';
+    rerun();
+  });
+
+  $('ccy').addEventListener('input', debounce(rerun, 250));
+  $('suffix').addEventListener('input', debounce(rerun, 250));
+
+  // ---- File intake ----------------------------------------------------------
+  var drop = $('drop');
+  var fileInput = $('file');
+
+  drop.addEventListener('click', function () { fileInput.click(); });
+  drop.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files[0]) readFile(fileInput.files[0]);
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('drag'); });
+  });
+  ['dragleave', 'dragend'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('drag'); });
+  });
+  drop.addEventListener('drop', function (e) {
+    e.preventDefault(); drop.classList.remove('drag');
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) readFile(f);
+  });
+
+  function readFile(file) {
+    state.fileName = file.name || 'transactions.csv';
+    var reader = new FileReader();
+    reader.onload = function () { state.text = String(reader.result || ''); run(); };
+    reader.onerror = function () { alert('Could not read that file. Make sure it is a .csv text file.'); };
+    reader.readAsText(file);
+  }
+
+  // ---- Conversion -----------------------------------------------------------
+  function currentOptions() {
+    return {
+      accountType: state.accountType,
+      defaultCurrency: ($('ccy').value || 'CAD').trim() || 'CAD',
+      symbolSuffix: state.accountType === 'investing' ? ($('suffix').value || '').trim() : '',
+    };
+  }
+
+  function rerun() { if (state.text) run(); }
+
+  function run() {
+    state.result = WSWF.convert(state.text, currentOptions());
+    render(state.result);
+  }
+
+  // ---- Rendering ------------------------------------------------------------
+  function render(res) {
+    $('results').hidden = false;
+    $('done').hidden = true;
+    $('filename').textContent = state.fileName;
+
+    // Summary chips
+    var chips = $('chips');
+    chips.innerHTML = '';
+    chips.appendChild(chip(res.stats.output + ' rows converted', true));
+    var order = ['BUY', 'SELL', 'DIVIDEND', 'INTEREST', 'FEE', 'TAX', 'DEPOSIT', 'WITHDRAWAL', 'SPLIT'];
+    order.forEach(function (t) {
+      if (res.stats.byType[t]) chips.appendChild(chip(t.toLowerCase() + ' ' + res.stats.byType[t]));
+    });
+
+    // Detected columns
+    var det = $('detected');
+    var need = ['date', 'type', 'description', 'amount', 'currency'];
+    var parts = need.map(function (f) {
+      if (res.detected[f]) return '<code>' + esc(res.detected[f]) + '</code> as ' + f;
+      return '<span class="miss">' + f + ' not found</span>';
+    });
+    det.innerHTML = 'Detected columns: ' + parts.join(' · ');
+
+    // Notices
+    renderNotices(res.warnings);
+
+    // Preview table
+    renderTable(res);
+
+    // Scroll results into view on first load only
+    if (!render._shown) { render._shown = true; $('results').scrollIntoView({ behavior: prefersReduced() ? 'auto' : 'smooth', block: 'start' }); }
+  }
+
+  function renderNotices(warnings) {
+    var box = $('notices');
+    box.innerHTML = '';
+    if (!warnings.length) {
+      box.appendChild(notice('good', 'Everything mapped cleanly — no rows need attention.', null));
+      return;
+    }
+    var shown = warnings.slice(0, 4);
+    var rest = warnings.slice(4);
+    var el = document.createElement('div');
+    el.className = 'notice warn' + (rest.length ? ' collapsed' : '');
+    el.innerHTML = warnIcon() + '<div><strong>' + warnings.length + ' thing' + (warnings.length > 1 ? 's' : '') + ' to review before importing</strong>' +
+      '<ul style="margin:6px 0 0;padding-left:18px">' +
+      shown.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') +
+      rest.map(function (w) { return '<li class="extra">' + esc(w) + '</li>'; }).join('') +
+      '</ul></div>';
+    box.appendChild(el);
+    if (rest.length) {
+      var more = document.createElement('button');
+      more.className = 'notice-more';
+      more.textContent = 'Show ' + rest.length + ' more';
+      more.addEventListener('click', function () {
+        el.classList.remove('collapsed'); more.remove();
+      });
+      box.appendChild(more);
+    }
+  }
+
+  function renderTable(res) {
+    var wrap = $('table-wrap');
+    var cols = res.header;
+    var numeric = { quantity: 1, unitPrice: 1, fee: 1, amount: 1 };
+    var max = 60;
+    var rows = res.records.slice(0, max);
+    var html = '<table><thead><tr>' + cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '</tr></thead><tbody>';
+    rows.forEach(function (rec) {
+      html += '<tr>' + cols.map(function (c) {
+        var v = rec[c] == null ? '' : rec[c];
+        if (c === 'symbol') return '<td class="sym">' + esc(v) + '</td>';
+        if (c === 'activityType') return '<td><span class="tag">' + esc(v) + '</span></td>';
+        if (numeric[c]) return '<td class="num">' + esc(v) + '</td>';
+        return '<td>' + esc(v) + '</td>';
+      }).join('') + '</tr>';
+    });
+    html += '</tbody></table>';
+    if (res.records.length > max) {
+      html += '<div class="more-rows">+ ' + (res.records.length - max) + ' more rows in the download</div>';
+    }
+    wrap.innerHTML = html;
+  }
+
+  // ---- Download -------------------------------------------------------------
+  $('download').addEventListener('click', function () {
+    if (!state.result) return;
+    var csv = WSWF.toCSV(state.result.header, state.result.records);
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = outName(state.fileName);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    $('done').hidden = false;
+  });
+
+  $('reset').addEventListener('click', function () {
+    state.text = ''; state.result = null; state.fileName = '';
+    fileInput.value = '';
+    $('results').hidden = true;
+    render._shown = false;
+  });
+
+  function outName(name) {
+    var base = String(name).replace(/\.csv$/i, '').replace(/[^\w.-]+/g, '_');
+    return (base || 'transactions') + '-wealthfolio.csv';
+  }
+
+  // ---- Helpers --------------------------------------------------------------
+  function chip(text, accent) {
+    var el = document.createElement('span');
+    el.className = 'chip' + (accent ? ' accent' : '');
+    var m = String(text).match(/^(.*?)(\d+)$/);
+    if (m) el.innerHTML = esc(m[1]) + '<b>' + m[2] + '</b>';
+    else el.innerHTML = '<b>' + esc(text) + '</b>';
+    return el;
+  }
+  function notice(kind, text, icon) {
+    var el = document.createElement('div');
+    el.className = 'notice ' + kind;
+    el.innerHTML = (kind === 'good' ? goodIcon() : warnIcon()) + '<div>' + esc(text) + '</div>';
+    return el;
+  }
+  function warnIcon() { return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4m0 4h.01"/><path d="M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>'; }
+  function goodIcon() { return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  function debounce(fn, ms) { var t; return function () { clearTimeout(t); t = setTimeout(fn, ms); }; }
+  function prefersReduced() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+})();
+
+</script>
+</body>
+</html>
