@@ -1,0 +1,7 @@
+date,transaction,description,amount,balance,currency
+2024-11-05,PURCHASE,"LOBLAWS #1234 TORONTO ON",-82.14,-82.14,CAD
+2024-11-06,PURCHASE,"NETFLIX.COM",-16.99,-99.13,CAD
+2024-11-07,CASHBACK,"Cash back reward",1.64,-97.49,CAD
+2024-11-10,PAYMENT,"Payment received - thank you",200.00,102.51,CAD
+2024-11-12,REFUND,"Return - INDIGO #45",25.00,127.51,CAD
+2024-11-15,FEE,"Annual fee",-120.00,7.51,CAD

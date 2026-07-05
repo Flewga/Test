@@ -1,0 +1,99 @@
+<div class="wrap">
+  <header class="masthead">
+    <span class="eyebrow">
+      CSV Translator
+      <span class="flow">Wealthsimple <span class="arrow" aria-hidden="true">→</span> Wealthfolio</span>
+    </span>
+    <h1>Import your Wealthsimple exports without the copy-paste</h1>
+    <p class="lede">Drop a Wealthsimple transaction CSV and get back a file Wealthfolio can import directly — tickers pulled out of the description, activity types mapped, cash rows tagged with <code>$CASH</code>. Works for spending, credit&nbsp;card, and investing accounts.</p>
+  </header>
+
+  <div class="stack">
+    <!-- Setup -->
+    <section class="card card-pad" aria-labelledby="setup-title">
+      <h2 class="card-title" id="setup-title">1 · Set up the account</h2>
+      <div class="setup-grid">
+        <div class="field">
+          <label id="acct-label">Account type</label>
+          <div class="segmented" role="group" aria-labelledby="acct-label" id="acct-seg">
+            <button type="button" data-acct="investing" aria-pressed="true">Investing</button>
+            <button type="button" data-acct="spending" aria-pressed="false">Spending</button>
+            <button type="button" data-acct="credit" aria-pressed="false">Credit card</button>
+          </div>
+          <span class="hint" id="acct-hint">Trades &amp; dividends keep their ticker; cash moves use <code>$CASH</code>.</span>
+        </div>
+        <div class="field">
+          <label for="ccy">Default currency</label>
+          <input type="text" id="ccy" value="CAD" maxlength="3" autocomplete="off" spellcheck="false" aria-describedby="ccy-hint">
+          <span class="hint" id="ccy-hint">Used when a row has no currency column.</span>
+        </div>
+        <div class="field" id="suffix-field">
+          <label for="suffix">Ticker suffix <span style="font-weight:400;color:var(--faint)">(optional)</span></label>
+          <input type="text" id="suffix" placeholder="e.g. .TO" autocomplete="off" spellcheck="false" aria-describedby="suffix-hint">
+          <span class="hint" id="suffix-hint">Wealthfolio often needs an exchange suffix for Canadian tickers.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Drop zone -->
+    <section aria-labelledby="drop-title">
+      <h2 class="card-title" id="drop-title">2 · Add the Wealthsimple CSV</h2>
+      <div class="drop" id="drop" role="button" tabindex="0" aria-label="Drop a CSV file here or press Enter to browse">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4l4 4"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+        <span class="big">Drop your CSV here</span>
+        <span class="small">or <span class="browse">browse your files</span> — nothing is uploaded</span>
+      </div>
+      <input type="file" id="file" accept=".csv,text/csv" class="sr-only" tabindex="-1">
+    </section>
+
+    <!-- Results -->
+    <section class="card card-pad" id="results" hidden aria-labelledby="results-title" aria-live="polite">
+      <div class="results-head">
+        <h2 class="card-title" id="results-title" style="margin:0">3 · Review &amp; download</h2>
+        <span class="filename" id="filename"></span>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="detected" id="detected"></p>
+      <div class="notices" id="notices"></div>
+      <div class="table-wrap" id="table-wrap"></div>
+      <div class="actions">
+        <button type="button" class="primary" id="download">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v10m0 0l-4-4m4 4l4-4"/><path d="M5 19h14"/></svg>
+          Download Wealthfolio CSV
+        </button>
+        <button type="button" class="ghost" id="reset">Clear</button>
+        <span class="done" id="done" hidden>Saved — import it in Wealthfolio under Activities → Import.</span>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="card card-pad" aria-labelledby="how-title">
+      <h2 class="card-title" id="how-title">What it does</h2>
+      <div class="how">
+        <div class="step">
+          <span class="n">Ticker</span>
+          <h3>Pulls the symbol out</h3>
+          <p>“ZFL - BMO Long Federal Bond Index ETF: Cash dividend…” becomes a clean <code>ZFL</code> in its own column.</p>
+        </div>
+        <div class="step">
+          <span class="n">Type</span>
+          <h3>Maps the activity</h3>
+          <p>Buys, sells, dividends, interest, fees, deposits and withdrawals map to Wealthfolio’s activity types.</p>
+        </div>
+        <div class="step">
+          <span class="n">Cash</span>
+          <h3>Tags cash moves</h3>
+          <p>Spending and credit-card rows ride the <code>$CASH-&lt;currency&gt;</code> symbol so every row imports.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <span class="lock">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+      100% in your browser · no upload · no tracking
+    </span>
+    <span>Output columns: <code style="font-family:var(--mono)">date, symbol, quantity, activityType, unitPrice, currency, fee, amount</code></span>
+  </footer>
+</div>

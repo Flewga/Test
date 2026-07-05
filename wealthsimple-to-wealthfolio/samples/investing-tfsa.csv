@@ -1,0 +1,9 @@
+date,transaction,description,amount,balance,currency
+2024-11-04,DIV,"ZFL - BMO Long Federal Bond Index ETF: Cash dividend distribution, received on 2024-11-04, record date of 2024-10-30",12.34,1512.34,CAD
+2024-10-30,DIV,"XEQT - iShares Core Equity ETF Portfolio: Cash dividend distribution, received on 2024-10-30",8.90,1500.00,CAD
+2024-10-15,BUY,"ZFL - BMO Long Federal Bond Index ETF: Bought 10.0000 shares at $14.52",-145.20,1491.10,CAD
+2024-10-14,BUY,"XEQT - iShares Core Equity ETF Portfolio: Bought 20.0000 shares at $32.10",-642.00,1636.30,CAD
+2024-10-10,SELL,"AAPL - Apple Inc: Sold 3.0000 shares of AAPL at US$225.50",676.50,2278.30,USD
+2024-10-02,CONT,"Contribution from linked account",1000.00,1601.80,CAD
+2024-09-30,INT,"Interest earned on uninvested cash",0.42,601.80,CAD
+2024-09-15,FEE,"ADR fee",-0.35,601.38,USD
