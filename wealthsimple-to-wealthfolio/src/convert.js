@@ -184,18 +184,25 @@
   }
 
   // Pull quantity and price out of a trade description.
-  //   "Bought 10.0000 shares at $12.34" -> { quantity: 10, price: 12.34 }
-  //   "Sold 5 shares of AAPL at US$150.00"
+  //   "Bought 10.0000 shares at $12.34"            -> { quantity: 10, price: 12.34 }
+  //   "Sold 5 shares of AAPL at US$150.00"          -> { quantity: 5, price: 150 }
+  //   "Bought 1.4258 shares, received on 2024-11-04"-> { quantity: 1.4258, price: NaN }
+  // The price is only taken when it's unambiguous: preceded by at/@/"price of"
+  // and either $-anchored or written with decimals. A bare integer such as a
+  // year (2024) is never treated as a price — the caller derives it from the
+  // cash amount instead.
   function extractTrade(description) {
     var s = String(description == null ? '' : description);
-    var m = s.match(/([\d,]*\.?\d+)\s*(?:shares?|units?)\b(?:[^@]*?\bat\b|[^@]*?@)\s*(?:US|C|CA|CAD|USD)?\$?\s*([\d,]*\.?\d+)/i);
-    if (m) {
-      return { quantity: parseAmount(m[1]), price: parseAmount(m[2]) };
-    }
-    // Fall back: just a share count, price unknown.
+    var quantity = NaN;
     var q = s.match(/([\d,]*\.?\d+)\s*(?:shares?|units?)\b/i);
-    if (q) return { quantity: parseAmount(q[1]), price: NaN };
-    return { quantity: NaN, price: NaN };
+    if (q) quantity = parseAmount(q[1]);
+
+    var price = NaN;
+    var p = s.match(/(?:\bat\b|@|price of)\s*(?:US|CA|C|CAD|USD)?\s*\$\s*([\d,]+(?:\.\d+)?)/i)
+         || s.match(/(?:\bat\b|@|price of)\s*([\d,]+\.\d+)\b/i);
+    if (p) price = parseAmount(p[1]);
+
+    return { quantity: quantity, price: price };
   }
 
   // ---------------------------------------------------------------------------
@@ -324,34 +331,39 @@
           var aSign = activityType === 'BUY' ? 1 : -1;
           var trade = extractTrade(description);
           if (!isNaN(trade.quantity)) quantity = trade.quantity;
-          if (!isNaN(trade.price)) unitPrice = trade.price;
+          var parsedPrice = isNaN(trade.price) ? null : trade.price;
 
-          // Derive a missing price from the net amount: gross = |net| - aSign*fee.
-          if (unitPrice === '' && quantity !== '' && !isNaN(amount) && quantity) {
-            var gross = Math.abs(amount) - aSign * fee;
-            unitPrice = round(Math.abs(gross / quantity), 6);
+          // The net cash amount is authoritative, so whenever we have quantity
+          // and an amount we can derive the exact unit price:
+          //   gross (quantity * unitPrice) = |amount| - aSign*fee
+          var derivedPrice = null;
+          if (quantity !== '' && !isNaN(amount) && quantity) {
+            derivedPrice = round(Math.abs((Math.abs(amount) - aSign * fee) / quantity), 6);
           }
-          // Derive a missing net amount from the parsed quantity/price/fee.
+
+          if (parsedPrice !== null && derivedPrice !== null) {
+            // Both available: trust the description price only if it reconciles
+            // with the cash; otherwise the description number was misread
+            // (e.g. a date/year), so use the amount-derived price silently.
+            var disagree = Math.abs(parsedPrice - derivedPrice) > Math.max(0.01, derivedPrice * 0.01);
+            unitPrice = disagree ? derivedPrice : parsedPrice;
+          } else if (parsedPrice !== null) {
+            unitPrice = parsedPrice;
+          } else if (derivedPrice !== null) {
+            unitPrice = derivedPrice;
+          }
+
+          // Derive a missing net amount from parsed quantity/price/fee.
           if (isNaN(amount) && quantity !== '' && unitPrice !== '') {
             amountOverride = round(quantity * unitPrice + aSign * fee, 2);
           }
 
+          // Only warn when we genuinely couldn't determine a field — a clean,
+          // reconciled row (the common case) produces no noise.
           if (quantity === '') {
             result.warnings.push('Row ' + (r + 1) + ': ' + activityType + ' with no share count found — set quantity manually.');
           } else if (unitPrice === '') {
-            result.warnings.push('Row ' + (r + 1) + ': ' + activityType + ' with no unit price found — set it manually.');
-          }
-
-          // Sanity check: does quantity x unitPrice (+/- fee) reconcile with the
-          // statement's net cash? A mismatch means something was misparsed.
-          if (quantity !== '' && unitPrice !== '' && !isNaN(amount)) {
-            var expected = round(quantity * unitPrice + aSign * fee, 2);
-            var stmt = round(Math.abs(amount), 2);
-            if (Math.abs(expected - stmt) > Math.max(0.02, stmt * 0.005)) {
-              result.warnings.push('Row ' + (r + 1) + ': ' + quantity + ' x ' + unitPrice +
-                (fee ? (aSign > 0 ? ' + ' : ' - ') + round(fee, 2) + ' fee' : '') +
-                ' = ' + expected + ', but the statement amount is ' + stmt + '. Check quantity/price/fee.');
-            }
+            result.warnings.push('Row ' + (r + 1) + ': ' + activityType + ' with no price and no amount to derive it from — set the unit price manually.');
           }
         } else if (activityType === 'SPLIT') {
           // Wealthfolio treats a SPLIT's amount as the ratio (e.g. 2 for 2:1),

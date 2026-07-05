@@ -275,15 +275,43 @@ function rowsByType(res, type) { return res.records.filter(r => r.activityType =
   eq(buy.amount, '409.99', 'no-net: amount = q*p + fee');
 })();
 
-// Mismatch between parsed price and the statement amount raises a warning.
+// When the description price disagrees with the cash amount, the cash wins
+// (the amount is authoritative) and the row auto-corrects without a warning.
 (() => {
   const csv = [
     'date,transaction,description,amount,currency',
-    // 10 * 14.52 = 145.20, but the statement says 200 — misparse/typo.
+    // description says $14.52 but the cash is $200 for 10 shares -> $20/share.
     '2024-10-15,BUY,"ZFL - BMO: Bought 10.0000 shares at $14.52",-200.00,CAD',
   ].join('\n');
   const res = WSWF.convert(csv, { accountType: 'investing' });
-  ok(res.warnings.some(w => /statement amount is 200/.test(w)), 'mismatch: warns on q*p vs statement (' + JSON.stringify(res.warnings) + ')');
+  const r = res.records[0];
+  eq(r.unitPrice, '20', 'disagree: uses amount-derived price');
+  eq(r.amount, '200', 'disagree: amount stays the statement cash');
+  ok(res.warnings.length === 0, 'disagree: no warning (auto-corrected)');
+})();
+
+// The year in a dividend-reinvestment / fractional line must NOT be read as a
+// price — this is the exact bug the user hit ("1.4258 x 2024 = 2885.82").
+(() => {
+  eq(WSWF.extractTrade('VFV - Vanguard: Bought 1.4258 shares, received on 2024-11-04'),
+     { quantity: 1.4258, price: NaN }, 'year: not parsed as price');
+  const csv = [
+    'date,transaction,description,amount,currency',
+    '2024-11-04,DRIP,"VFV - Vanguard: Bought 1.4258 shares, received on 2024-11-04",-64.51,CAD',
+  ].join('\n');
+  const res = WSWF.convert(csv, { accountType: 'investing' });
+  const r = res.records[0];
+  eq(r.activityType, 'BUY', 'drip: reinvestment classified as BUY');
+  eq(r.quantity, '1.4258', 'drip: quantity');
+  ok(Math.abs(+r.unitPrice - 64.51 / 1.4258) < 1e-6, 'drip: price derived from amount (64.51 / 1.4258 ~ 45.24)');
+  ok(Math.abs(+r.quantity * +r.unitPrice - 64.51) < 0.01, 'drip: quantity * price reconciles to the cash amount');
+  eq(r.amount, '64.51', 'drip: amount = statement cash');
+  ok(res.warnings.length === 0, 'drip: no warning (' + JSON.stringify(res.warnings) + ')');
+})();
+
+// A $-anchored integer price (no decimals) is still accepted.
+(() => {
+  eq(WSWF.extractTrade('AAPL: Bought 2 shares at $150'), { quantity: 2, price: 150 }, 'int-price: $150 accepted');
 })();
 
 // Fractional shares reconcile cleanly.
